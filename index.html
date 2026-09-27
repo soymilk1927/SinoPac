@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票交易手續費折讓與損益試算器</title>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --success: #d93025; /* 台股紅漲 */
+            --danger: #188038;  /* 台股綠跌 */
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --border: #dadce0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg);
+            color: #202124;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            padding: 24px;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #172b4d;
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 10px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #5e6c84;
+            margin-bottom: 6px;
+        }
+
+        input, select {
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus {
+            border-color: var(--primary);
+        }
+
+        .card {
+            background-color: #f4f5f7;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 20px;
+        }
+
+        .card-title {
+            font-weight: bold;
+            font-size: 1rem;
+            margin-bottom: 12px;
+            color: #172b4d;
+        }
+
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px dashed var(--border);
+        }
+
+        .result-row:last-child {
+            border-bottom: none;
+        }
+
+        .highlight {
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: var(--primary);
+        }
+
+        .profit { color: var(--success); font-weight: bold; }
+        .loss { color: var(--danger); font-weight: bold; }
+
+        .note {
+            font-size: 0.8rem;
+            color: #6b778c;
+            margin-top: 16px;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>股票手續費「兩段式折讓」試算器</h2>
+
+    <!-- 折扣參數設定 -->
+    <div class="card" style="margin-top: 0; background-color: #e8f0fe;">
+        <div class="card-title">⚙️ 折扣參數設定</div>
+        <div class="grid">
+            <div class="form-group">
+                <label>第一段門檻 (元)</label>
+                <input type="number" id="threshold" value="1000000" step="100000">
+            </div>
+            <div class="form-group">
+                <label>第一段折扣 (折)</label>
+                <input type="number" id="discount1" value="2.0" step="0.1" min="0" max="10">
+            </div>
+            <div class="form-group">
+                <label>第二段折扣 (折)</label>
+                <input type="number" id="discount2" value="3.8" step="0.1" min="0" max="10">
+            </div>
+        </div>
+    </div>
+
+    <!-- 交易模式與金額 -->
+    <div class="grid" style="margin-top: 20px;">
+        <div class="form-group">
+            <label>交易類別</label>
+            <select id="tradeType">
+                <option value="dayTrade">當沖 (證交稅 0.15%)</option>
+                <option value="normal">非當沖 / 隔日沖 (證交稅 0.3%)</option>
+            </select>
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+            <label>快速試算：總成交金額 (買+賣總計)</label>
+            <input type="number" id="totalVolume" placeholder="例：54467310">
+        </div>
+    </div>
+
+    <div style="text-align: center; font-weight: bold; color: #6b778c; margin: 10px 0;">— 或輸入單筆買賣價量 —</div>
+
+    <div class="grid">
+        <div class="form-group">
+            <label>買進價格 (元)</label>
+            <input type="number" id="buyPrice" placeholder="例：175.5" step="0.1">
+        </div>
+        <div class="form-group">
+            <label>賣出價格 (元)</label>
+            <input type="number" id="sellPrice" placeholder="例：180" step="0.1">
+        </div>
+        <div class="form-group">
+            <label>交易張數 (1張=1000股)</label>
+            <input type="number" id="shares" placeholder="例：1" value="1">
+        </div>
+    </div>
+
+    <!-- 試算結果區 -->
+    <div class="card">
+        <div class="card-title">📊 試算結果</div>
+        
+        <div class="result-row">
+            <span>總成交金額：</span>
+            <span id="resTotalAmount">0 元</span>
+        </div>
+        <div class="result-row">
+            <span>原價手續費 (1.425‰)：</span>
+            <span id="resRawFee">0 元</span>
+        </div>
+        <div class="result-row">
+            <span>實際應付手續費：</span>
+            <span id="resActualFee">0 元</span>
+        </div>
+        <div class="result-row" style="background-color: #e6f4ea; padding: 12px 8px; border-radius: 6px;">
+            <span style="font-weight: bold; color: var(--danger);">次月 15 日退回折讓款：</span>
+            <span id="resRebate" class="highlight">0 元</span>
+        </div>
+        
+        <div id="profitSection" style="display: none; margin-top: 12px; border-top: 2px solid var(--border); padding-top: 12px;">
+            <div class="result-row">
+                <span>證交稅：</span>
+                <span id="resTax">0 元</span>
+            </div>
+            <div class="result-row">
+                <span>當日帳面淨損益 (未含退款)：</span>
+                <span id="resBookProfit">0 元</span>
+            </div>
+            <div class="result-row">
+                <span>最終實得淨損益 (含次月退款)：</span>
+                <span id="resFinalProfit" style="font-size: 1.1rem;">0 元</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="note">
+        * 說明：當總成交金額大於第一段門檻時，超出部分將自動採用第二段折扣計算。<br>
+        * 券商手續費基本率以 1.425‰ 計算；證交稅當沖採 0.15%、一般交易採 0.3% 計算。
+    </div>
+</div>
+
+<script>
+    function calculate() {
+        const threshold = parseFloat(document.getElementById('threshold').value) || 0;
+        const discount1 = (parseFloat(document.getElementById('discount1').value) || 0) / 10;
+        const discount2 = (parseFloat(document.getElementById('discount2').value) || 0) / 10;
+        const tradeType = document.getElementById('tradeType').value;
+        const totalVolumeInput = parseFloat(document.getElementById('totalVolume').value);
+
+        const buyPrice = parseFloat(document.getElementById('buyPrice').value);
+        const sellPrice = parseFloat(document.getElementById('sellPrice').value);
+        const shares = parseFloat(document.getElementById('shares').value) || 0;
+
+        let totalAmount = 0;
+        let isDetailMode = false;
+        let buyAmount = 0;
+        let sellAmount = 0;
+
+        if (!isNaN(buyPrice) && !isNaN(sellPrice) && shares > 0) {
+            isDetailMode = true;
+            buyAmount = buyPrice * shares * 1000;
+            sellAmount = sellPrice * shares * 1000;
+            totalAmount = buyAmount + sellAmount;
+        } else if (!isNaN(totalVolumeInput)) {
+            totalAmount = totalVolumeInput;
+        }
+
+        if (totalAmount <= 0) {
+            resetResults();
+            return;
+        }
+
+        // 1. 原價手續費
+        const rawFee = Math.floor(totalAmount * 0.001425);
+
+        // 2. 兩段式實際手續費計算
+        let actualFee = 0;
+        if (totalAmount <= threshold) {
+            actualFee = Math.floor(rawFee * discount1);
+        } else {
+            const part1Raw = Math.floor(threshold * 0.001425);
+            const part2Raw = rawFee - part1Raw;
+            actualFee = Math.floor(part1Raw * discount1) + Math.floor(part2Raw * discount2);
+        }
+
+        // 3. 折讓款 (退款)
+        const rebate = rawFee - actualFee;
+
+        // 更新基礎渲染
+        document.getElementById('resTotalAmount').innerText = totalAmount.toLocaleString() + ' 元';
+        document.getElementById('resRawFee').innerText = rawFee.toLocaleString() + ' 元';
+        document.getElementById('resActualFee').innerText = actualFee.toLocaleString() + ' 元';
+        document.getElementById('resRebate').innerText = rebate.toLocaleString() + ' 元';
+
+        // 損益細節模式 (當輸入買賣價量時顯示)
+        const profitSection = document.getElementById('profitSection');
+        if (isDetailMode) {
+            profitSection.style.display = 'block';
+            const taxRate = (tradeType === 'dayTrade') ? 0.0015 : 0.003;
+            const tax = Math.floor(sellAmount * taxRate);
+            
+            const grossProfit = sellAmount - buyAmount;
+            const bookProfit = grossProfit - rawFee - tax;
+            const finalProfit = bookProfit + rebate;
+
+            document.getElementById('resTax').innerText = tax.toLocaleString() + ' 元';
+            
+            const bookElem = document.getElementById('resBookProfit');
+            bookElem.innerText = (bookProfit >= 0 ? '+' : '') + bookProfit.toLocaleString() + ' 元';
+            bookElem.className = bookProfit >= 0 ? 'profit' : 'loss';
+
+            const finalElem = document.getElementById('resFinalProfit');
+            finalElem.innerText = (finalProfit >= 0 ? '+' : '') + finalProfit.toLocaleString() + ' 元';
+            finalElem.className = finalProfit >= 0 ? 'profit' : 'loss';
+        } else {
+            profitSection.style.display = 'none';
+        }
+    }
+
+    function resetResults() {
+        document.getElementById('resTotalAmount').innerText = '0 元';
+        document.getElementById('resRawFee').innerText = '0 元';
+        document.getElementById('resActualFee').innerText = '0 元';
+        document.getElementById('resRebate').innerText = '0 元';
+        document.getElementById('profitSection').style.display = 'none';
+    }
+
+    // 綁定所有輸入欄位即時觸發計算
+    const inputs = document.querySelectorAll('input, select');
+    inputs.forEach(input => {
+        input.addEventListener('input', calculate);
+        input.addEventListener('change', calculate);
+    });
+</script>
+
+</body>
+</html>
